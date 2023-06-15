@@ -6,7 +6,7 @@ use winit::{
     window::WindowBuilder,
 };
 use winit::window::Window;
-use std::time::{SystemTime};
+use winit::dpi::PhysicalSize;
 
 
 struct State {
@@ -14,7 +14,7 @@ struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
+    size: PhysicalSize<u32>,
     window: Window,
     render_pipeline: wgpu::RenderPipeline,
 }
@@ -82,7 +82,7 @@ impl State {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
@@ -119,7 +119,7 @@ impl State {
             self.surface.configure(&self.device, &self.config);
         }
     }
-    fn input(&mut self, event: &WindowEvent) -> bool {
+    fn input(&mut self, _event: &WindowEvent) -> bool {
         false
     }
     fn update(&mut self) {}
@@ -148,7 +148,7 @@ impl State {
                 depth_stencil_attachment: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.draw(0..3, 0..1);
+            render_pass.draw(0..4, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -159,7 +159,7 @@ impl State {
 pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window = WindowBuilder::new().with_title("smallpt").with_inner_size(PhysicalSize::new(1024, 768)).build(&event_loop).unwrap();
     let mut state = State::new(window).await;
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
