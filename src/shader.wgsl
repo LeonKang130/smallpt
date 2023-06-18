@@ -16,6 +16,7 @@ fn vertex_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 struct CameraUniform
 {
     raygen: mat4x4<f32>,
+    frame_idx: u32,
 };
 struct Sphere
 {
@@ -42,7 +43,7 @@ var<private> seed: u32;
 const PI = 3.1415926;
 const EPS = 1e-3;
 const SPP = 64;
-const MAX_BOUNCE = 8;
+const MAX_BOUNCE = 5;
 fn frand() -> f32
 {
     /*
@@ -91,11 +92,11 @@ fn intersect(ray: Ray) -> Hit
             let c = dot(f, f) - sphere.radius * sphere.radius;
             let t0 = c / q;
             let t1 = q;
-            if (t0 > 0.0 && t0 < hit.t) {
+            if (t0 > EPS && t0 < hit.t) {
                 hit.t = t0;
                 hit.primitive_idx = i;
             }
-            if (t1 > 0.0 && t1 < hit.t) {
+            if (t1 > EPS && t1 < hit.t) {
                 hit.t = t1;
                 hit.primitive_idx = i;
             }
@@ -117,7 +118,8 @@ fn radiance(ray: Ray) -> vec3<f32>
         }
         let sphere = spheres[hit.primitive_idx];
         ray.origin += hit.t * ray.direction;
-        let normal = normalize(ray.origin - sphere.center);
+        var normal = normalize(ray.origin - sphere.center);
+        normal *= select(1.0, -1.0, dot(ray.direction, normal) > 0.0);
         ray.direction = sample_cosine_hemisphere(normal);
         ray.origin += normal * EPS;
         acc += sphere.emission * amp * PI;
@@ -137,7 +139,7 @@ fn linear_to_srgb(x: vec3<f32>) -> vec3<f32>
 fn fragment_main(@location(0) frag_coord: vec2<f32>) -> @location(0) vec4<f32> {
     let uv = clamp(frag_coord * 0.5 + 0.5, vec2<f32>(0.0), vec2<f32>(1.0));
     var ifrag_coord = vec2<u32>(uv * 1024.0);
-    seed = (ifrag_coord.g | ifrag_coord.r << 10u) * 0x000343fdu + 0x00269ec3u;
+    seed = (ifrag_coord.g | ifrag_coord.r << 10u | camera.frame_idx << 20u) * 0x000343fdu + 0x00269ec3u;
     var color = vec3<f32>(0.0);
     for (var i = 0; i < SPP; i++)
     {

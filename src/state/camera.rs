@@ -1,5 +1,6 @@
 use std::ops::{Add, Mul};
-use cgmath::{Point3, Vector3, Matrix4, Rad};
+use cgmath::{Point3, Vector3, Matrix4, Rad, InnerSpace};
+use winit::event::*;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
@@ -18,6 +19,7 @@ pub struct Camera {
     pub focal_length: f32,
     pub znear: f32,
     pub zfar: f32,
+    pub frame_idx: u32,
 }
 
 impl Camera {
@@ -44,7 +46,7 @@ impl Camera {
             right.x, right.y, right.z, 0.0,
             up.x, up.y, up.z, 0.0,
             forward.x, forward.y, forward.z, 0.0,
-            self.position.x, self.position.y, self.position.z, 0.0
+            self.position.x, self.position.y, self.position.z, 0.0,
         );
     }
 }
@@ -53,6 +55,8 @@ impl Camera {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     raygen: [[f32; 4]; 4],
+    frame_idx: u32,
+    _padding: [u32; 3],
 }
 
 impl CameraUniform
@@ -62,10 +66,86 @@ impl CameraUniform
         use cgmath::SquareMatrix;
         Self {
             raygen: Matrix4::identity().into(),
+            frame_idx: 0,
+            _padding: [0; 3],
         }
     }
     pub fn update_raygen_matrix(&mut self, camera: &Camera)
     {
         self.raygen = camera.raygen_matrix().into();
+    }
+    pub fn update_frame_index(&mut self, camera: &Camera) { self.frame_idx = camera.frame_idx; }
+}
+
+pub struct CameraController
+{
+    speed: f32,
+    is_forward_pressed: bool,
+    is_backward_pressed: bool,
+    is_left_pressed: bool,
+    is_right_pressed: bool,
+}
+
+impl CameraController
+{
+    pub fn new(speed: f32) -> Self
+    {
+        Self {
+            speed,
+            is_forward_pressed: false,
+            is_backward_pressed: false,
+            is_left_pressed: false,
+            is_right_pressed: false,
+        }
+    }
+    pub fn process_events(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput {
+                input: KeyboardInput {
+                    state,
+                    virtual_keycode: Some(keycode),
+                    ..
+                },
+                ..
+            } => {
+                let is_pressed = *state == ElementState::Pressed;
+                match keycode {
+                    VirtualKeyCode::W | VirtualKeyCode::Up => {
+                        self.is_forward_pressed = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::A | VirtualKeyCode::Left => {
+                        self.is_left_pressed = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::S | VirtualKeyCode::Down => {
+                        self.is_backward_pressed = is_pressed;
+                        true
+                    }
+                    VirtualKeyCode::D | VirtualKeyCode::Right => {
+                        self.is_right_pressed = is_pressed;
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+    pub fn update_camera(&self, camera: &mut Camera) {
+        if self.is_forward_pressed {
+            camera.position += camera.direction * self.speed;
+        }
+        if self.is_backward_pressed {
+            camera.position -= camera.direction * self.speed;
+        }
+        let right = camera.direction.cross(camera.up).normalize();
+        if self.is_left_pressed {
+            camera.position -= right * self.speed;
+        }
+        if self.is_right_pressed {
+            camera.position += right * self.speed;
+        }
+        camera.frame_idx += 1;
     }
 }

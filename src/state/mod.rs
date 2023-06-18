@@ -1,6 +1,6 @@
 mod camera;
 mod cornell;
-use camera::{Camera, CameraUniform};
+use camera::{Camera, CameraUniform, CameraController};
 use cornell::{SPHERES};
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
@@ -17,6 +17,7 @@ pub struct State {
     pub window: Window,
     pub render_pipeline: wgpu::RenderPipeline,
     pub camera: Camera,
+    pub camera_controller: CameraController,
     pub camera_uniform: CameraUniform,
     pub camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
@@ -71,6 +72,7 @@ impl State {
             focal_length: 0.035,
             znear: 0.1,
             zfar: 100.0,
+            frame_idx: 0,
         };
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_raygen_matrix(&camera);
@@ -183,6 +185,7 @@ impl State {
             },
             multiview: None,
         });
+        let camera_controller = CameraController::new(6.4);
         Self {
             window,
             surface,
@@ -192,6 +195,7 @@ impl State {
             size,
             render_pipeline,
             camera,
+            camera_controller,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
@@ -209,10 +213,15 @@ impl State {
             self.surface.configure(&self.device, &self.config);
         }
     }
-    pub fn input(&mut self, _event: &WindowEvent) -> bool {
-        false
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
+        self.camera_controller.process_events(event)
     }
-    pub fn update(&mut self) {}
+    pub fn update(&mut self) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update_raygen_matrix(&self.camera);
+        self.camera_uniform.update_frame_index(&self.camera);
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+    }
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());

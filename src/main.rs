@@ -1,5 +1,6 @@
 mod state;
 
+use wgpu::{BufferAddress, Buffer};
 use state::State;
 use winit::{
     event::*,
@@ -28,7 +29,9 @@ pub async fn run() {
                         ..
                     },
                     ..
-                } => *control_flow = ControlFlow::Exit,
+                } => {
+                    *control_flow = ControlFlow::Exit;
+                }
                 WindowEvent::Resized(physical_size) => {
                     state.resize(*physical_size);
                 }
