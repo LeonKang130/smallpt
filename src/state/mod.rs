@@ -21,7 +21,9 @@ pub struct State {
     pub camera_uniform: CameraUniform,
     pub camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
-    pub sphere_bind_group: wgpu::BindGroup,
+    pub geometry_bind_group: wgpu::BindGroup,
+    pub accumulate_buffer: wgpu::Buffer,
+    pub accumulate_bind_group: wgpu::BindGroup,
 }
 
 impl State {
@@ -115,7 +117,7 @@ impl State {
                 usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             }
         );
-        let sphere_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let geometry_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -130,24 +132,62 @@ impl State {
                     count: None,
                 }
             ],
-            label: Some("sphere_bind_group_layout"),
+            label: Some("geometry_bind_group_layout"),
         });
-        let sphere_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &sphere_bind_group_layout,
+        let geometry_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &geometry_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: sphere_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("geometry_bind_group"),
+        });
+        let accumulate_buffer = device.create_buffer(
+            &wgpu::BufferDescriptor {
+                label: Some("Accumulate buffer"),
+                size: (1024 * 1024 * 4 * std::mem::size_of::<f32>()) as wgpu::BufferAddress,
+                mapped_at_creation: false,
+                usage: wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::STORAGE,
+            }
+        );
+        let accumulate_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage {
+                            read_only: false,
+                        },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 }
             ],
-            label: Some("sphere_bind_group"),
+            label: Some("accumulate_bind_group_layout"),
+        });
+        let accumulate_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &accumulate_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: accumulate_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("accumulate_bind_group"),
         });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     &camera_bind_group_layout,
-                    &sphere_bind_group_layout,
+                    &geometry_bind_group_layout,
+                    &accumulate_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -199,7 +239,9 @@ impl State {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
-            sphere_bind_group,
+            geometry_bind_group,
+            accumulate_buffer,
+            accumulate_bind_group,
         }
     }
     pub fn window(&self) -> &Window {
@@ -248,7 +290,8 @@ impl State {
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.sphere_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.geometry_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.accumulate_bind_group, &[]);
             render_pass.draw(0..4, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));

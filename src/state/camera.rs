@@ -146,6 +146,11 @@ impl CameraController
         if self.is_right_pressed {
             camera.position += right * self.speed;
         }
-        camera.frame_idx += 1;
+        if self.is_forward_pressed | self.is_backward_pressed | self.is_left_pressed | self.is_right_pressed {
+            camera.frame_idx = 0;
+        }
+        else {
+            camera.frame_idx += 1;
+        }
     }
 }

@@ -21,6 +21,7 @@ struct CameraUniform
 struct Sphere
 {
     radius: f32,
+    clean_coat: f32,
     center: vec3<f32>,
     color: vec3<f32>,
     emission: vec3<f32>,
@@ -39,11 +40,13 @@ struct Hit
 var<uniform> camera: CameraUniform;
 @group(1) @binding(0)
 var<storage, read> spheres: array<Sphere>;
+@group(2) @binding(0)
+var<storage, read_write> accumulate: array<vec3<f32>>;
 var<private> seed: u32;
 const PI = 3.1415926;
 const EPS = 1e-3;
-const SPP = 64;
-const MAX_BOUNCE = 5;
+const SPP = 48;
+const MAX_BOUNCE = 8;
 fn frand() -> f32
 {
     /*
@@ -120,10 +123,17 @@ fn radiance(ray: Ray) -> vec3<f32>
         ray.origin += hit.t * ray.direction;
         var normal = normalize(ray.origin - sphere.center);
         normal *= select(1.0, -1.0, dot(ray.direction, normal) > 0.0);
-        ray.direction = sample_cosine_hemisphere(normal);
         ray.origin += normal * EPS;
         acc += sphere.emission * amp * PI;
-        amp *= sphere.color;
+        if (frand() < sphere.clean_coat)
+        {
+            ray.direction = reflect(ray.direction, normal);
+        }
+        else
+        {
+            amp *= sphere.color;
+            ray.direction = sample_cosine_hemisphere(normal);
+        }
     }
     return acc;
 }
@@ -139,12 +149,17 @@ fn linear_to_srgb(x: vec3<f32>) -> vec3<f32>
 fn fragment_main(@location(0) frag_coord: vec2<f32>) -> @location(0) vec4<f32> {
     let uv = clamp(frag_coord * 0.5 + 0.5, vec2<f32>(0.0), vec2<f32>(1.0));
     var ifrag_coord = vec2<u32>(uv * 1024.0);
-    seed = (ifrag_coord.g | ifrag_coord.r << 10u | camera.frame_idx << 20u) * 0x000343fdu + 0x00269ec3u;
+    let frag_idx = ifrag_coord.g | ifrag_coord.r << 10u;
+    seed = (frag_idx | camera.frame_idx << 20u) * 0x000343fdu + 0x00269ec3u;
     var color = vec3<f32>(0.0);
     for (var i = 0; i < SPP; i++)
     {
         let ray = generate_ray(frag_coord);
         color += radiance(ray);
     }
-    return vec4<f32>(linear_to_srgb(color * (1.0 / f32(SPP))), 1.0);
+    color *= 1.0 / f32(SPP);
+    let accumulated_color = accumulate[frag_idx];
+    color = (color + f32(camera.frame_idx) * accumulated_color) / f32(1u + camera.frame_idx);
+    accumulate[frag_idx] = color;
+    return vec4<f32>(linear_to_srgb(color), 1.0);
 }
