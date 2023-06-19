@@ -46,7 +46,7 @@ var<private> seed: u32;
 const PI = 3.1415926;
 const EPS = 1e-3;
 const SPP = 48;
-const MAX_BOUNCE = 8;
+const MAX_BOUNCE = 12;
 fn frand() -> f32
 {
     /*
@@ -125,14 +125,33 @@ fn radiance(ray: Ray) -> vec3<f32>
         normal *= select(1.0, -1.0, dot(ray.direction, normal) > 0.0);
         ray.origin += normal * EPS;
         acc += sphere.emission * amp * PI;
-        if (frand() < sphere.clean_coat)
+        var u = frand();
+        if (u < sphere.clean_coat)
         {
             ray.direction = reflect(ray.direction, normal);
+            u /= sphere.clean_coat;
         }
         else
         {
             amp *= sphere.color;
             ray.direction = sample_cosine_hemisphere(normal);
+            u = (u - sphere.clean_coat) / (1.0 - sphere.clean_coat);
+        }
+        let p1 = max(amp.r, max(amp.g, amp.b));
+        if (p1 < 1e-2) {
+            break;
+        }
+        let p2 = min(amp.r, max(amp.g, amp.b));
+        if (i > 6)
+        {
+            if (u < p2)
+            {
+                amp *= 1.0 / p2;
+            }
+            else
+            {
+                break;
+            }
         }
     }
     return acc;
