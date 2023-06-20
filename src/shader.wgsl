@@ -16,15 +16,20 @@ fn vertex_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 struct CameraUniform
 {
     raygen: mat4x4<f32>,
+    view_proj: mat4x4<f32>,
     frame_idx: u32,
 };
 struct Sphere
 {
     radius: f32,
-    clean_coat: f32,
+    material_idx: u32,
     center: vec3<f32>,
+};
+struct Material
+{
     color: vec3<f32>,
     emission: vec3<f32>,
+    clean_coat: f32,
 };
 struct Ray
 {
@@ -41,6 +46,8 @@ var<uniform> camera: CameraUniform;
 @group(1) @binding(0)
 var<storage, read> spheres: array<Sphere>;
 @group(2) @binding(0)
+var<storage, read> materials: array<Material>;
+@group(3) @binding(0)
 var<storage, read_write> accumulate: array<vec3<f32>>;
 var<private> seed: u32;
 const PI = 3.1415926;
@@ -124,18 +131,19 @@ fn radiance(ray: Ray) -> vec3<f32>
         var normal = normalize(ray.origin - sphere.center);
         normal *= select(1.0, -1.0, dot(ray.direction, normal) > 0.0);
         ray.origin += normal * EPS;
-        acc += sphere.emission * amp * PI;
+        let material = materials[sphere.material_idx];
+        acc += material.emission * amp * PI;
         var u = frand();
-        if (u < sphere.clean_coat)
+        if (u < material.clean_coat)
         {
             ray.direction = reflect(ray.direction, normal);
-            u /= sphere.clean_coat;
+            u /= material.clean_coat;
         }
         else
         {
-            amp *= sphere.color;
+            amp *= material.color;
             ray.direction = sample_cosine_hemisphere(normal);
-            u = (u - sphere.clean_coat) / (1.0 - sphere.clean_coat);
+            u = (u - material.clean_coat) / (1.0 - material.clean_coat);
         }
         let p1 = max(amp.r, max(amp.g, amp.b));
         if (p1 < 1e-2) {

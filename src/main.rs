@@ -1,6 +1,8 @@
+mod camera;
+mod scene;
 mod state;
 
-use wgpu::{BufferAddress, Buffer};
+
 use state::State;
 use winit::{
     event::*,
@@ -12,7 +14,7 @@ use winit::dpi::PhysicalSize;
 pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().with_title("smallpt").with_inner_size(PhysicalSize::new(1024, 1024)).build(&event_loop).unwrap();
+    let window = WindowBuilder::new().with_title("ssgi").with_inner_size(PhysicalSize::new(1024, 1024)).build(&event_loop).unwrap();
     let mut state = State::new(window).await;
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {

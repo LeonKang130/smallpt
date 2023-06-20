@@ -1,7 +1,12 @@
-mod camera;
-mod cornell;
-use camera::{Camera, CameraUniform, CameraController};
-use cornell::{SPHERES};
+use crate::camera::{
+    Camera,
+    CameraUniform,
+    CameraController
+};
+use crate::scene::{
+    SPHERES,
+    MATERIALS,
+};
 use winit::window::Window;
 use winit::dpi::PhysicalSize;
 use winit::event::*;
@@ -22,6 +27,7 @@ pub struct State {
     pub camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
     pub geometry_bind_group: wgpu::BindGroup,
+    pub material_bind_group: wgpu::BindGroup,
     pub accumulate_buffer: wgpu::Buffer,
     pub accumulate_bind_group: wgpu::BindGroup,
 }
@@ -77,7 +83,7 @@ impl State {
             frame_idx: 0,
         };
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_raygen_matrix(&camera);
+        camera_uniform.update(&camera);
         let camera_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Camera Buffer"),
@@ -144,6 +150,40 @@ impl State {
             ],
             label: Some("geometry_bind_group"),
         });
+        let material_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Material Buffer"),
+                contents: bytemuck::cast_slice(MATERIALS),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+        let material_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage {
+                            read_only: true,
+                        },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("material_bind_group_layout"),
+        });
+        let material_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &material_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: material_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("material_bind_group"),
+        });
         let accumulate_buffer = device.create_buffer(
             &wgpu::BufferDescriptor {
                 label: Some("Accumulate buffer"),
@@ -187,6 +227,7 @@ impl State {
                 bind_group_layouts: &[
                     &camera_bind_group_layout,
                     &geometry_bind_group_layout,
+                    &material_bind_group_layout,
                     &accumulate_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -240,6 +281,7 @@ impl State {
             camera_buffer,
             camera_bind_group,
             geometry_bind_group,
+            material_bind_group,
             accumulate_buffer,
             accumulate_bind_group,
         }
@@ -260,8 +302,7 @@ impl State {
     }
     pub fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_raygen_matrix(&self.camera);
-        self.camera_uniform.update_frame_index(&self.camera);
+        self.camera_uniform.update(&self.camera);
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -291,7 +332,8 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &self.geometry_bind_group, &[]);
-            render_pass.set_bind_group(2, &self.accumulate_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.material_bind_group, &[]);
+            render_pass.set_bind_group(3, &self.accumulate_bind_group, &[]);
             render_pass.draw(0..4, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));

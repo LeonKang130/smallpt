@@ -55,6 +55,7 @@ impl Camera {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     raygen: [[f32; 4]; 4],
+    view_proj: [[f32; 4]; 4],
     frame_idx: u32,
     _padding: [u32; 3],
 }
@@ -66,15 +67,17 @@ impl CameraUniform
         use cgmath::SquareMatrix;
         Self {
             raygen: Matrix4::identity().into(),
+            view_proj: Matrix4::identity().into(),
             frame_idx: 0,
             _padding: [0; 3],
         }
     }
-    pub fn update_raygen_matrix(&mut self, camera: &Camera)
+    pub fn update(&mut self, camera: &Camera)
     {
         self.raygen = camera.raygen_matrix().into();
+        self.view_proj = camera.view_projection_matrix().into();
+        self.frame_idx = camera.frame_idx;
     }
-    pub fn update_frame_index(&mut self, camera: &Camera) { self.frame_idx = camera.frame_idx; }
 }
 
 pub struct CameraController
